@@ -2,8 +2,6 @@
 
 module KubernetesDeploy
   class ResourceDiscovery
-    include KubeclientBuilder
-
     def initialize(namespace:, context:, logger:, namespace_tags:)
       @namespace = namespace
       @context = context
@@ -12,19 +10,25 @@ module KubernetesDeploy
     end
 
     def crds
-      @crds ||= begin
-        raw = JSON.parse(crd_client.get_custom_resource_definitions(as: :raw))
-        raw["items"].map do |r_def|
-          CustomResourceDefinition.new(namespace: @namespace, context: @context, logger: @logger,
-            definition: r_def, statsd_tags: @namespace_tags)
-        end
+      @crds ||= fetch_crds.map do |cr_def|
+        CustomResourceDefinition.new(namespace: @namespace, context: @context, logger: @logger,
+          definition: cr_def, statsd_tags: @namespace_tags)
       end
     end
 
     private
 
-    def crd_client
-      @crd_client ||= build_apiextensions_v1beta1_kubeclient(@context)
+    def fetch_crds
+      raw_json, _, st = kubectl.run("get", "CustomResourceDefinition", "-a", "--output=json", attempts: 5)
+      if st.success?
+        JSON.parse(raw_json)["items"]
+      else
+        []
+      end
+    end
+
+    def kubectl
+      @kubectl ||= Kubectl.new(namespace: @namespace, context: @context, logger: @logger, log_failure_by_default: true)
     end
   end
 end
