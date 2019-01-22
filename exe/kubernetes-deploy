@@ -3,8 +3,10 @@
 
 require 'kubernetes-deploy'
 require 'optparse'
+require 'tmpdir'
 
 skip_wait = false
+use_stdin = false
 template_dir = nil
 allow_protected_ns = false
 prune = true
@@ -23,6 +25,7 @@ ARGV.options do |opts|
   opts.on("--allow-protected-ns", "Enable deploys to #{prot_ns}; requires --no-prune") { allow_protected_ns = true }
   opts.on("--no-prune", "Disable deletion of resources that do not appear in the template dir") { prune = false }
   opts.on("--template-dir=DIR", "Set the template dir (default: config/deploy/$ENVIRONMENT)") { |v| template_dir = v }
+  opts.on("--use-stdin", "Use $stdin instead of a template dir") { use_stdin = true }
   opts.on("--verbose-log-prefix", "Add [context][namespace] to the log prefix") { verbose_log_prefix = true }
   opts.on("--max-watch-seconds=seconds",
     "Timeout error is raised if it takes longer than the specified number of seconds") do |t|
@@ -40,30 +43,52 @@ ARGV.options do |opts|
   opts.parse!
 end
 
+if use_stdin && template_dir
+  puts "The flags --use-stdin and --template-dir cannot be combined"
+  exit(1)
+end
+
 namespace = ARGV[0]
 context = ARGV[1]
-template_dir = KubernetesDeploy::OptionsHelper.default_and_check_template_dir(template_dir)
+template_dir = KubernetesDeploy::OptionsHelper.default_and_check_template_dir(template_dir) if template_dir || !use_stdin
 revision = KubernetesDeploy::OptionsHelper.revision_from_environment
 logger = KubernetesDeploy::FormattedLogger.build(namespace, context, verbose_prefix: verbose_log_prefix)
 
-runner = KubernetesDeploy::DeployTask.new(
-  namespace: namespace,
-  context: context,
-  current_sha: revision,
-  template_dir: template_dir,
-  bindings: bindings,
-  logger: logger,
-  max_watch_seconds: max_watch_seconds
-)
-
-begin
-  runner.run!(
-    verify_result: !skip_wait,
-    allow_protected_ns: allow_protected_ns,
-    prune: prune
+deploy_task = ->(template_dir) do
+  runner = KubernetesDeploy::DeployTask.new(
+    namespace: namespace,
+    context: context,
+    current_sha: revision,
+    template_dir: template_dir,
+    bindings: bindings,
+    logger: logger,
+    max_watch_seconds: max_watch_seconds
   )
-rescue KubernetesDeploy::DeploymentTimeoutError
-  exit(70)
-rescue KubernetesDeploy::FatalDeploymentError
-  exit(1)
+
+  begin
+    runner.run!(
+      verify_result: !skip_wait,
+      allow_protected_ns: allow_protected_ns,
+      prune: prune
+    )
+  rescue KubernetesDeploy::DeploymentTimeoutError
+    exit(70)
+  rescue KubernetesDeploy::FatalDeploymentError
+    exit(1)
+  end
 end
+
+with_stdin = ->(task_proc) do
+  if $stdin.tty?
+    puts "Nothing to read from $stdin"
+    exit(1)
+  end
+
+  Dir.mktmpdir("deploy-task") do |template_dir|
+    input = $stdin.readlines.join("")
+    file = File.open("#{File.expand_path(template_dir)}/templates.yml.erb", 'w+') { |f| f.print(input) }
+    task_proc.call(template_dir)
+  end
+end
+
+use_stdin ? with_stdin.call(deploy_task) : deploy_task.call(template_dir)
