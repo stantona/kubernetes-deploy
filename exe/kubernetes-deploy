@@ -49,28 +49,29 @@ context = ARGV.shift
 revision = KubernetesDeploy::OptionsHelper.revision_from_environment
 logger = KubernetesDeploy::FormattedLogger.build(namespace, context, verbose_prefix: verbose_log_prefix)
 
-KubernetesDeploy::OptionsHelper.with_consolidated_template_dir(template_dirs) do |template_dir|
-  runner = KubernetesDeploy::DeployTask.new(
-    namespace: namespace,
-    context: context,
-    current_sha: revision,
-    template_dir: template_dir,
-    bindings: bindings,
-    logger: logger,
-    max_watch_seconds: max_watch_seconds
-  )
+begin
+  KubernetesDeploy::OptionsHelper.with_consolidated_template_dir(template_dirs) do |template_dir|
+    runner = KubernetesDeploy::DeployTask.new(
+      namespace: namespace,
+      context: context,
+      current_sha: revision,
+      template_dir: template_dir,
+      bindings: bindings,
+      logger: logger,
+      max_watch_seconds: max_watch_seconds
+    )
 
-  begin
     runner.run!(
       verify_result: !skip_wait,
       allow_protected_ns: allow_protected_ns,
       prune: prune
     )
-  rescue KubernetesDeploy::DeploymentTimeoutError
-    exit(70)
-  rescue KubernetesDeploy::FatalDeploymentError
-    exit(1)
-  rescue KubernetesDeploy::OptionsHelper::OptionsError
-    exit(1)
   end
+rescue KubernetesDeploy::DeploymentTimeoutError
+  exit(70)
+rescue KubernetesDeploy::FatalDeploymentError
+  exit(1)
+rescue KubernetesDeploy::OptionsHelper::OptionsError => e
+  puts e.message
+  exit(1)
 end

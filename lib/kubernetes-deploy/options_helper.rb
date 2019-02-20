@@ -19,7 +19,8 @@ module KubernetesDeploy
 
       def revision_from_environment
         ENV.fetch('REVISION') do
-          raise OptionsError, "ENV['REVISION'] is missing. Please specify the commit SHA"
+          puts "ENV['REVISION'] is missing. Please specify the commit SHA"
+          exit 1
         end
       end
 
