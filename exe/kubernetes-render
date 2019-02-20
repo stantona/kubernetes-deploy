@@ -4,12 +4,8 @@
 require 'kubernetes-deploy'
 require 'kubernetes-deploy/render_task'
 require 'optparse'
-require 'tmpdir'
-require 'fileutils'
 
 template_dir = nil
-templates = []
-use_stdin = false
 bindings = {}
 
 ARGV.options do |opts|
@@ -18,30 +14,19 @@ ARGV.options do |opts|
     bindings.merge!(KubernetesDeploy::BindingsParser.parse(binds))
   end
   opts.on("--template-dir=DIR", "Set the template dir (default: config/deploy/$ENVIRONMENT)") { |v| template_dir = v }
-  opts.on("--use-stdin", "Use $stdin instead of a template dir") { use_stdin = true }
   opts.parse!
 end
 
-if template_dir && use_stdin
-  puts "The flags --use-stdin and --template-dir cannot be combined"
-  exit(1)
-end
+templates = ARGV
+logger = KubernetesDeploy::FormattedLogger.build(verbose_prefix: false)
+revision = KubernetesDeploy::OptionsHelper.revision_from_environment
 
-begin
-  template_dir = KubernetesDeploy::OptionsHelper.default_and_check_template_dir(template_dir, use_stdin: use_stdin)
-  templates = ARGV if template_dir || !use_stdin
+runner = KubernetesDeploy::RenderTask.new(
+  logger: logger,
+  current_sha: revision,
+  template_dir: template_dir,
+  bindings: bindings,
+)
 
-  logger = KubernetesDeploy::FormattedLogger.build(verbose_prefix: false)
-  revision = KubernetesDeploy::OptionsHelper.revision_from_environment
-
-  runner = KubernetesDeploy::RenderTask.new(
-    logger: logger,
-    current_sha: revision,
-    template_dir: template_dir,
-    bindings: bindings,
-  )
-  success = runner.run(STDOUT, templates)
-  exit(1) unless success
-ensure
-  FileUtils.rm_r(Dir.glob(File.expand_path(template_dir))) if use_stdin
-end
+success = runner.run(STDOUT, templates)
+exit(1) unless success
