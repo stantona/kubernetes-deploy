@@ -48,7 +48,7 @@ class OptionsHelperTest < KubernetesDeploy::TestCase
       fixture_path_yamls = []
       fixture_path_entries = Dir.glob("#{fixture_path('hello-cloud')}/*.{yml,yaml}*")
       fixture_path_entries.each do |path|
-        contents = File.read(path).split(/^---$/).reject(&:empty?).each do |f|
+        File.read(path).split(/^---$/).reject(&:empty?).each do |f|
           fixture_path_yamls << YAML.safe_load(f)
         end
       end
@@ -56,14 +56,13 @@ class OptionsHelperTest < KubernetesDeploy::TestCase
       template_dir_yamls = []
       template_dir_entries = Dir.glob("#{template_dir}/*").reject { |f| f.include?("from_stdin.yml.erb") }
       template_dir_entries.each do |path|
-        contents = File.read(path).split(/^---$/).reject(&:empty?).each do |f|
+        File.read(path).split(/^---$/).reject(&:empty?).each do |f|
           template_dir_yamls << YAML.safe_load(f)
         end
       end
       fixture_path_yamls.each do |fixture|
         assert(template_dir_yamls.include?(fixture))
       end
-
     end
   ensure
     $stdin = old_stdin
