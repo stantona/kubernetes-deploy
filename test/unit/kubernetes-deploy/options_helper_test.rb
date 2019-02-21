@@ -13,11 +13,11 @@ class OptionsHelperTest < KubernetesDeploy::TestCase
     template_dirs = [fixture_path('hello-cloud'), fixture_path('partials')]
 
     KubernetesDeploy::OptionsHelper.with_consolidated_template_dir(template_dirs) do |template_dir|
-      fixture_path_entries = template_dirs.collect { |dir| Dir.entries(dir) }.flatten.uniq.reject { |f| f =~ /^---$/ }
+      fixture_path_entries = template_dirs.collect { |dir| Dir.entries(dir) }.flatten.uniq
       template_dir_entries = Dir.entries(template_dir)
       assert_equal(fixture_path_entries.length, template_dir_entries.length)
       fixture_path_entries.each do |fixture|
-        assert(template_dir_entries.index { |s| s.include?(fixture) })
+        assert(template_dir_entries.select { |s| s.include?(fixture) })
       end
     end
   end
