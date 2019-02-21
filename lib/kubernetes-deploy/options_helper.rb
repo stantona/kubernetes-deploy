@@ -45,9 +45,8 @@ module KubernetesDeploy
 
         template_dirs.each do |template_dir|
           template_dir = File.expand_path(template_dir)
-          templates = Dir.entries(template_dir).reject { |f| f =~ /^\.{1,2}$/ }
+          templates = Dir.entries(template_dir).reject { |f| File.directory?("#{template_dir}/#{f}") }
           templates.each do |template|
-            next if File.directory?(File.expand_path("#{template_dir}/#{template}"))
             File.open("#{temp_dir}/#{template_dir.tr('/', '_')}_#{template}", 'w+') do |f|
               f.print(File.read("#{template_dir}/#{template}"))
             end
